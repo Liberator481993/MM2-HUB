@@ -798,6 +798,11 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	return math.max(0.5, (uiScale and uiScale.Scale) or 1)
     end
 
+    local function pointInside(guiObject, point)
+    	local p, z = guiObject.AbsolutePosition, guiObject.AbsoluteSize
+    	return point.X >= p.X and point.X <= p.X + z.X and point.Y >= p.Y and point.Y <= p.Y + z.Y
+    end
+
     local function clampOnScreen(target, margin)
     	local cam = workspace.CurrentCamera
     	if not cam then return end
@@ -808,44 +813,45 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local x = math.clamp(p.X, margin, maxX)
     	local y = math.clamp(p.Y, margin, maxY)
     	local scale = dragScale()
-    	local dx, dy = (x - p.X) / scale, (y - p.Y) / scale
-    	if dx ~= 0 or dy ~= 0 then
-    		target.Position = UDim2.new(target.Position.X.Scale, target.Position.X.Offset + dx, target.Position.Y.Scale, target.Position.Y.Offset + dy)
-    	end
+    	target.Position = UDim2.new(target.Position.X.Scale, target.Position.X.Offset + (x - p.X) / scale,
+    		target.Position.Y.Scale, target.Position.Y.Offset + (y - p.Y) / scale)
     end
 
     local function makeDraggable(handle, target, onTap)
-    	-- Separate mouse/touch movement streams; match the active touch by TouchId.
-    	local dragging, moved, startIn, startPos, active, mouseDown = false, false, nil, nil, nil, false
-    	local function begin(i)
-    		if i.UserInputType ~= Enum.UserInputType.MouseButton1 and i.UserInputType ~= Enum.UserInputType.Touch then return end
-    		dragging, moved, active = true, false, i
-    		mouseDown = i.UserInputType == Enum.UserInputType.MouseButton1
+    	-- Listen globally: child TextLabels/Buttons can consume GuiObject.InputBegan on mobile.
+    	-- Hit-test the actual handle rectangle, then follow the active touch via TouchMoved.
+    	local dragging, moved, startIn, startPos, activeTouch, mouseDown = false, false, nil, nil, false, false
+    	connect(UserInputService.InputBegan, function(i)
+    		local kind = i.UserInputType
+    		if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then return end
+    		if not handle.Visible or not pointInside(handle, i.Position) then return end
+    		dragging, moved = true, false
+    		activeTouch = kind == Enum.UserInputType.Touch
+    		mouseDown = kind == Enum.UserInputType.MouseButton1
     		startIn, startPos = i.Position, target.Position
-    	end
-    	local function move(i, isTouch)
+    	end)
+    	local function applyMove(i)
     		if not dragging then return end
-    		if isTouch then
-    			if not active or active.UserInputType ~= Enum.UserInputType.Touch or active.TouchId ~= i.TouchId then return end
-    		else
-    			if not mouseDown or i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-    		end
     		local d = i.Position - startIn
-    		if d.Magnitude > 3 then moved = true end
+    		if d.Magnitude > 2 then moved = true end
     		if moved then
     			local scale = dragScale()
-    			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / scale, startPos.Y.Scale, startPos.Y.Offset + d.Y / scale)
+    			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / scale,
+    				startPos.Y.Scale, startPos.Y.Offset + d.Y / scale)
     			clampOnScreen(target, 0)
     		end
     	end
-    	connect(handle.InputBegan, begin)
-    	connect(UserInputService.InputChanged, function(i) move(i, false) end)
-    	connect(UserInputService.TouchMoved, function(i) move(i, true) end)
+    	connect(UserInputService.TouchMoved, function(i)
+    		if activeTouch then applyMove(i) end
+    	end)
+    	connect(UserInputService.InputChanged, function(i)
+    		if mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement then applyMove(i) end
+    	end)
     	connect(UserInputService.InputEnded, function(i)
-    		local ended = active and ((active.UserInputType == Enum.UserInputType.Touch and i.UserInputType == Enum.UserInputType.Touch and active.TouchId == i.TouchId)
-    			or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1))
+    		local ended = (activeTouch and i.UserInputType == Enum.UserInputType.Touch)
+    			or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1)
     		if dragging and ended then
-    			dragging, mouseDown, active = false, false, nil
+    			dragging, activeTouch, mouseDown = false, false, false
     			if not moved and onTap then onTap() end
     		end
     	end)
