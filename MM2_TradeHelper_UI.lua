@@ -164,22 +164,9 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	{ theirs = { { "Chroma Luger", 1 }, { "Eternal", 1 }, { "Nebula", 2 } }, mine = { { "Chroma Heat", 1 }, { "Ice Dragon", 2 } } },
     	{ theirs = { { "Icebreaker", 1 }, { "Seer", 1 } }, mine = { { "Harvester", 1 } } },
     }
-    local DemoHistory = {
-    	{ date = "Today · 14:32", give = { { "Heat", 1 }, { "Luger", 1 } }, get = { { "Eternal", 1 } } },
-    	{ date = "Today · 11:05", give = { { "Seer", 1 } }, get = { { "Batwing", 1 }, { "Nebula", 1 } } },
-    	{ date = "Yesterday · 21:40", give = { { "Chroma Heat", 1 } }, get = { { "Chroma Fang", 1 } } },
-    	{ date = "Yesterday · 18:12", give = { { "Ice Dragon", 1 } }, get = { { "Gingerblade", 1 } } },
-    	{ date = "Mon · 20:15", give = { { "Pet Panda", 1 } }, get = { { "Pet Dragon", 1 } } },
-    	{ date = "Mon · 09:48", give = { { "Batwing", 2 } }, get = { { "Chroma Slasher", 1 } } },
-    	{ date = "Sun · 16:20", give = { { "Gold Knife", 1 } }, get = { { "Gem Gun", 1 }, { "Pet Cat", 1 } } },
-    }
-    for _, h in ipairs(DemoHistory) do -- snapshot totals at the time of the trade
-    	local gv, tv = 0, 0
-    	for _, e in ipairs(h.give) do gv = gv + DBIndex[e[1]].value * e[2] end
-    	for _, e in ipairs(h.get) do tv = tv + DBIndex[e[1]].value * e[2] end
-    	h.giveV, h.getV = gv, tv
-    end
-    
+    -- Real trade history is not connected yet. Never display invented trades.
+    local DemoHistory = {}
+
     local Currencies = {
     	Value = { rate = 1, pre = "", suf = " V" },
     	USD = { rate = 0.12, pre = "$", suf = "" },     -- demo rate
@@ -807,6 +794,10 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     corner(fab, 23); bind(fab, "BackgroundColor3", "accent"); stroke(fab, "text", 1, 0.75)
     
     ------------------------------------------------------------------------ drag + open/close
+    local function dragScale()
+    	return math.max(0.5, (uiScale and uiScale.Scale) or 1)
+    end
+
     local function clampOnScreen(target, margin)
     	local cam = workspace.CurrentCamera
     	if not cam then return end
@@ -816,49 +807,50 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local maxY = math.max(margin, vp.Y - margin - sz.Y)
     	local x = math.clamp(p.X, margin, maxX)
     	local y = math.clamp(p.Y, margin, maxY)
-    	local dx, dy = x - p.X, y - p.Y
-    	if dx ~= 0 or dy ~= 0 then target.Position = target.Position + UDim2.fromOffset(dx, dy) end
+    	local scale = dragScale()
+    	local dx, dy = (x - p.X) / scale, (y - p.Y) / scale
+    	if dx ~= 0 or dy ~= 0 then
+    		target.Position = UDim2.new(target.Position.X.Scale, target.Position.X.Offset + dx, target.Position.Y.Scale, target.Position.Y.Offset + dy)
+    	end
     end
-    
+
     local function makeDraggable(handle, target, onTap)
-    	-- One drag controller per handle. The window shell is moved in screen pixels;
-    	-- do not attach controllers to nested title/label objects (that causes double movement).
+    	-- Separate mouse/touch movement streams; match the active touch by TouchId.
     	local dragging, moved, startIn, startPos, active, mouseDown = false, false, nil, nil, nil, false
-    	connect(handle.InputBegan, function(i)
-    		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-    			dragging = true
-    			moved = false
-    			active = i
-    			mouseDown = i.UserInputType == Enum.UserInputType.MouseButton1
-    			startIn = i.Position
-    			startPos = target.Position
+    	local function begin(i)
+    		if i.UserInputType ~= Enum.UserInputType.MouseButton1 and i.UserInputType ~= Enum.UserInputType.Touch then return end
+    		dragging, moved, active = true, false, i
+    		mouseDown = i.UserInputType == Enum.UserInputType.MouseButton1
+    		startIn, startPos = i.Position, target.Position
+    	end
+    	local function move(i, isTouch)
+    		if not dragging then return end
+    		if isTouch then
+    			if not active or active.UserInputType ~= Enum.UserInputType.Touch or active.TouchId ~= i.TouchId then return end
+    		else
+    			if not mouseDown or i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
     		end
-    	end)
-    	connect(UserInputService.InputChanged, function(i)
-    		local isMove = (mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement)
-    			or (active and i == active)
-    		if not dragging or not isMove then return end
     		local d = i.Position - startIn
     		if d.Magnitude > 3 then moved = true end
     		if moved then
-    			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-    			-- Keep the complete window visible, but allow its top edge to reach y=0.
+    			local scale = dragScale()
+    			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / scale, startPos.Y.Scale, startPos.Y.Offset + d.Y / scale)
     			clampOnScreen(target, 0)
     		end
-    	end)
+    	end
+    	connect(handle.InputBegan, begin)
+    	connect(UserInputService.InputChanged, function(i) move(i, false) end)
+    	connect(UserInputService.TouchMoved, function(i) move(i, true) end)
     	connect(UserInputService.InputEnded, function(i)
-    		local ended = (active and i == active)
-    			or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1)
-    			or (active and active.UserInputType == Enum.UserInputType.Touch and i.UserInputType == Enum.UserInputType.Touch)
+    		local ended = active and ((active.UserInputType == Enum.UserInputType.Touch and i.UserInputType == Enum.UserInputType.Touch and active.TouchId == i.TouchId)
+    			or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1))
     		if dragging and ended then
-    			dragging = false
-    			mouseDown = false
-    			active = nil
+    			dragging, mouseDown, active = false, false, nil
     			if not moved and onTap then onTap() end
     		end
     	end)
     end
-    
+
     local minimized = false
     local function setOpen(open)
     	if open then
@@ -938,7 +930,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	corner(dot, 4)
     	label(st, "SYSTEM READY", 10, SEM.good, F.B, { AutomaticSize = XA, Size = UDim2.new(0, 0, 1, 0), TextWrapped = false })
     	label(hero, "MM2 Trade Helper", 20, "text", F.B)
-    	label(hero, "Interface prototype · sample data · game logic not attached yet", 11, "sub", F.M)
+    	label(hero, "UI test build · game integration is not connected yet", 11, "sub", F.M)
     	local tags = box(hero, UDim2.new(1, 0, 0, 18))
     	hlist(tags, 6)
     	U.badge(tags, "UI " .. VERSION, "accent"); U.demoBadge(tags, "SAMPLE DATA")
@@ -1379,7 +1371,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local sCnt = U.stat(sg, "TRADES", "↻")
     	local sWin = U.stat(sg, "WIN RATE", "▲")
     
-    	local bar = U.title(sc, "Sample history", "SAMPLE")
+    	local bar = U.title(sc, "Trade history", "NOT CONNECTED")
     	U.demoButton(bar, "Export", "ghost", UDim2.fromOffset(70, 22))
     	local list = box(sc, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
     	vlist(list, 6)
@@ -1393,6 +1385,9 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     			pl = pl + p
     			if p > 0 then wins = wins + 1 end
     			U.historyRow(list, h)
+    		end
+    		if #hist == 0 then
+    			label(list, "No real trades recorded yet. History will appear after trade detection is connected.", 12, "sub", F.M, { Size = UDim2.new(1, -12, 0, 48), TextWrapped = true })
     		end
     		sPL(sfmt(pl), (pl > 0) and "good" or ((pl < 0) and "bad" or nil))
     		sCnt(tostring(#hist))
@@ -1552,7 +1547,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	title(sc, "About")
     	local c4 = card(sc, 12)
     	label(c4, "MM2 Trade Helper · UI prototype " .. VERSION, 12, "text", F.B)
-    	label(c4, "All values, inventory and history are sample data. PC: press RightShift to hide or show the window.", 11, "sub", F.R)
+    	label(c4, "Values and inventory are sample data; trade history stays empty until real trade detection is connected. PC: press RightShift to hide or show the window.", 11, "sub", F.R)
     	local br = box(c4, UDim2.new(1, 0, 0, 32))
     	hlist(br, 8)
     	U.button(br, "Reset settings", "ghost", function() U.resetAll() end, UDim2.fromOffset(110, 30))
