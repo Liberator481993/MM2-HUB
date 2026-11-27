@@ -64,7 +64,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     
     ------------------------------------------------------------------------ settings
     local DEFAULTS = {
-    	theme = "Midnight", accent = "Violet", scale = 1, transparency = 0,
+    	theme = "Abyss", accent = "Violet", scale = 0.9, transparency = 0,
     	animations = true, notifications = true, sidebar = "Auto",
     	currency = "Value", numFormat = "Short", system = "Pure Value", showDemo = true,
     	notifTrade = true, notifItems = true, notifResult = true,
@@ -79,6 +79,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     pcall(function()
     	if isfile and readfile and isfile(CONFIG) then merge(S, HttpService:JSONDecode(readfile(CONFIG))) end
     end)
+    S.scale = math.clamp(tonumber(S.scale) or 0.9, 0.78, 1.05)
     
     local saveTok = 0
     local function save()
@@ -92,14 +93,14 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     
     ------------------------------------------------------------------------ palettes
     local Themes = {
-    	Midnight = { bg = Color3.fromRGB(12, 13, 20), panel = Color3.fromRGB(17, 19, 29), card = Color3.fromRGB(24, 27, 40), card2 = Color3.fromRGB(33, 37, 53), stroke = Color3.fromRGB(46, 51, 71), text = Color3.fromRGB(236, 239, 248), sub = Color3.fromRGB(139, 147, 173) },
+    	Midnight = { bg = Color3.fromRGB(15, 19, 30), panel = Color3.fromRGB(21, 27, 41), card = Color3.fromRGB(29, 38, 56), card2 = Color3.fromRGB(39, 51, 72), stroke = Color3.fromRGB(57, 73, 99), text = Color3.fromRGB(240, 245, 255), sub = Color3.fromRGB(155, 171, 198) },
     	Obsidian = { bg = Color3.fromRGB(10, 10, 11), panel = Color3.fromRGB(15, 15, 17), card = Color3.fromRGB(22, 22, 25), card2 = Color3.fromRGB(31, 31, 35), stroke = Color3.fromRGB(46, 46, 52), text = Color3.fromRGB(238, 238, 241), sub = Color3.fromRGB(143, 143, 152) },
-    	Abyss = { bg = Color3.fromRGB(8, 14, 23), panel = Color3.fromRGB(12, 20, 32), card = Color3.fromRGB(18, 30, 46), card2 = Color3.fromRGB(26, 41, 61), stroke = Color3.fromRGB(38, 57, 82), text = Color3.fromRGB(232, 242, 250), sub = Color3.fromRGB(126, 150, 178) },
+    	Abyss = { bg = Color3.fromRGB(13, 22, 36), panel = Color3.fromRGB(19, 31, 49), card = Color3.fromRGB(28, 44, 66), card2 = Color3.fromRGB(39, 59, 84), stroke = Color3.fromRGB(58, 82, 112), text = Color3.fromRGB(238, 247, 255), sub = Color3.fromRGB(151, 177, 205) },
     	Graphite = { bg = Color3.fromRGB(16, 14, 15), panel = Color3.fromRGB(22, 19, 21), card = Color3.fromRGB(31, 27, 30), card2 = Color3.fromRGB(41, 36, 40), stroke = Color3.fromRGB(60, 53, 58), text = Color3.fromRGB(245, 239, 241), sub = Color3.fromRGB(160, 148, 154) },
     }
     local ThemeOrder = { "Midnight", "Obsidian", "Abyss", "Graphite" }
     local Accents = {
-    	Violet = Color3.fromRGB(139, 92, 246), Sky = Color3.fromRGB(56, 189, 248), Emerald = Color3.fromRGB(52, 211, 153),
+    	Violet = Color3.fromRGB(151, 111, 255), Sky = Color3.fromRGB(64, 210, 245), Emerald = Color3.fromRGB(52, 211, 153),
     	Rose = Color3.fromRGB(251, 113, 133), Amber = Color3.fromRGB(251, 191, 36), Orchid = Color3.fromRGB(217, 70, 239),
     }
     local AccentOrder = { "Violet", "Sky", "Emerald", "Rose", "Amber", "Orchid" }
@@ -810,36 +811,37 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local cam = workspace.CurrentCamera
     	if not cam then return end
     	local vp = cam.ViewportSize
-    	local sc = (target == win) and uiScale.Scale or 1
-    	local p = target.AbsolutePosition
-    	local sx, sy = target.Size.X.Offset * sc, target.Size.Y.Offset * sc
-    	local dx, dy = 0, 0
-    	if p.X + sx < margin then dx = margin - (p.X + sx) elseif p.X > vp.X - margin then dx = (vp.X - margin) - p.X end
-    	if p.Y < 0 then dy = -p.Y elseif p.Y > vp.Y - margin then dy = (vp.Y - margin) - p.Y end
-    	if dx ~= 0 or dy ~= 0 then target.Position = target.Position + UDim2.fromOffset(dx / sc, dy / sc) end
+    	local p, sz = target.AbsolutePosition, target.AbsoluteSize
+    	local maxX = math.max(margin, vp.X - margin - sz.X)
+    	local maxY = math.max(margin, vp.Y - margin - sz.Y)
+    	local x = math.clamp(p.X, margin, maxX)
+    	local y = math.clamp(p.Y, margin, maxY)
+    	local dx, dy = x - p.X, y - p.Y
+    	if dx ~= 0 or dy ~= 0 then target.Position = target.Position + UDim2.fromOffset(dx, dy) end
     end
     
     local function makeDraggable(handle, target, onTap)
-    	local dragging, moved, startIn, startPos, active = false, false, nil, nil, nil
+    	local dragging, moved, startIn, startPos, active, mouseDown = false, false, nil, nil, nil, false
     	connect(handle.InputBegan, function(i)
     		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-    			dragging = true; moved = false; active = i; startIn = i.Position; startPos = target.Position
+    			dragging = true; moved = false; active = i; mouseDown = i.UserInputType == Enum.UserInputType.MouseButton1
+    			startIn = i.Position; startPos = target.Position
     		end
     	end)
     	connect(UserInputService.InputChanged, function(i)
-    		if dragging and (i == active or i.UserInputType == Enum.UserInputType.MouseMovement) then
+    		local isMove = (mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement) or (active and i == active)
+    		if dragging and isMove then
     			local d = i.Position - startIn
-    			if d.Magnitude > 5 then moved = true end
+    			if d.Magnitude > 4 then moved = true end
     			if moved then
-    				local sc = (target == win) and uiScale.Scale or 1
-    				target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / sc, startPos.Y.Scale, startPos.Y.Offset + d.Y / sc)
-    				clampOnScreen(target, 56)
+    				target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    				clampOnScreen(target, 12)
     			end
     		end
     	end)
     	connect(UserInputService.InputEnded, function(i)
-    		if dragging and (i == active or i.UserInputType == Enum.UserInputType.MouseButton1) then
-    			dragging = false
+    		if dragging and (i == active or i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch) then
+    			dragging = false; mouseDown = false; active = nil
     			if not moved and onTap then onTap() end
     		end
     	end)
@@ -873,7 +875,11 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     end
     
     makeDraggable(topbar, win)
+    makeDraggable(pageTitle, win)
+    makeDraggable(pageSub, win)
     makeDraggable(logo, win)
+    makeDraggable(logoText, win)
+    makeDraggable(mark, win)
     makeDraggable(fab, fab, function() setOpen(true) end)
     minBtn.Activated:Connect(function() setOpen(false) end)
     connect(UserInputService.InputBegan, function(i, gp)
@@ -1639,7 +1645,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	if vp.Y > vp.X then
     		w = math.min(aw * 0.97, 440); h = math.min(ah * 0.74, 640)
     	else
-    		w = math.min(aw * 0.9, 740); h = math.min(ah * 0.88, 450)
+    		w = math.min(aw * 0.86, 700); h = math.min(ah * 0.84, 430)
     	end
     	w = math.max(math.min(w, aw - 8), 280)
     	h = math.max(math.min(h, ah - 8), 220)
