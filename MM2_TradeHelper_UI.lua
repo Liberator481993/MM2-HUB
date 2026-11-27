@@ -818,45 +818,65 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     end
 
     local function makeDraggable(handle, target, onTap)
-    	-- Listen globally: child TextLabels/Buttons can consume GuiObject.InputBegan on mobile.
-    	-- Hit-test the actual handle rectangle, then follow the active touch via TouchMoved.
-    	local dragging, moved, startIn, startPos, activeTouch, mouseDown = false, false, nil, nil, false, false
-    	connect(UserInputService.InputBegan, function(i)
-    		local kind = i.UserInputType
-    		if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then return end
-    		if not handle.Visible or not pointInside(handle, i.Position) then return end
-    		dragging, moved = true, false
-    		activeTouch = kind == Enum.UserInputType.Touch
-    		mouseDown = kind == Enum.UserInputType.MouseButton1
-    		startIn, startPos = i.Position, target.Position
-    	end)
-    	local function applyMove(i)
-    		if not dragging then return end
-    		local d = i.Position - startIn
-    		if d.Magnitude > 2 then moved = true end
-    		if moved then
-    			local scale = dragScale()
-    			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / scale,
-    				startPos.Y.Scale, startPos.Y.Offset + d.Y / scale)
-    			clampOnScreen(target, 0)
-    		end
-    	end
-    	connect(UserInputService.TouchMoved, function(i)
-    		if activeTouch then applyMove(i) end
-    	end)
-    	connect(UserInputService.InputChanged, function(i)
-    		if mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement then applyMove(i) end
-    	end)
-    	connect(UserInputService.InputEnded, function(i)
-    		local ended = (activeTouch and i.UserInputType == Enum.UserInputType.Touch)
-    			or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1)
-    		if dragging and ended then
-    			dragging, activeTouch, mouseDown = false, false, false
-    			if not moved and onTap then onTap() end
-    		end
-    	end)
-    end
+        -- Touch movement is polled from GetTouches because some mobile executors do not
+        -- consistently forward TouchMoved. InputBegan still starts the gesture globally.
+        local dragging, moved, startIn, startPos = false, false, nil, nil
+        local activeTouchId, mouseDown = nil, false
 
+        connect(UserInputService.InputBegan, function(i)
+            local kind = i.UserInputType
+            if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then return end
+            if not handle.Visible or not pointInside(handle, i.Position) then return end
+            dragging, moved = true, false
+            activeTouchId = kind == Enum.UserInputType.Touch and i.TouchId or nil
+            mouseDown = kind == Enum.UserInputType.MouseButton1
+            startIn, startPos = i.Position, target.Position
+        end)
+
+        local function applyMove(position)
+            if not dragging or not startIn or not startPos then return end
+            local d = position - startIn
+            if d.Magnitude > 2 then moved = true end
+            if moved then
+                local scale = dragScale()
+                target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / scale,
+                    startPos.Y.Scale, startPos.Y.Offset + d.Y / scale)
+                clampOnScreen(target, 0)
+            end
+        end
+
+        -- Keep the event path as a fast path; RenderStepped polling below is the fallback.
+        connect(UserInputService.TouchMoved, function(i)
+            if activeTouchId ~= nil and i.TouchId == activeTouchId then
+                applyMove(i.Position)
+            end
+        end)
+        connect(UserInputService.InputChanged, function(i)
+            if mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement then
+                applyMove(i.Position)
+            end
+        end)
+        connect(game:GetService("RunService").RenderStepped, function()
+            if not dragging or activeTouchId == nil then return end
+            local ok, touches = pcall(function() return UserInputService:GetTouches() end)
+            if not ok or type(touches) ~= "table" then return end
+            for _, touch in ipairs(touches) do
+                if touch.TouchId == activeTouchId then
+                    applyMove(touch.Position)
+                    return
+                end
+            end
+        end)
+        connect(UserInputService.InputEnded, function(i)
+            local ended = (activeTouchId ~= nil and i.UserInputType == Enum.UserInputType.Touch
+                    and i.TouchId == activeTouchId)
+                or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1)
+            if dragging and ended then
+                dragging, activeTouchId, mouseDown = false, nil, false
+                if not moved and onTap then onTap() end
+            end
+        end)
+    end
     local minimized = false
     local function setOpen(open)
     	if open then
