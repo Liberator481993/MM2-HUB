@@ -348,8 +348,81 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	f.Parent = p
     	return f
     end
+    local RU = {
+        ["Dashboard"]="Главная", ["Status, inventory value and quick actions"]="Статус, стоимость инвентаря и быстрые действия",
+        ["Trade Helper"]="Помощник обмена", ["Alerts, item info, warnings and value display"]="Уведомления, информация о предметах и предупреждения",
+        ["Trade Checker"]="Проверка обмена", ["Both sides valued · WIN / FAIR / LOSE"]="Оценка обеих сторон · WIN / FAIR / LOSE",
+        ["Inventory"]="Инвентарь", ["Your items with search, filters and prices"]="Ваши предметы, поиск, фильтры и цены",
+        ["Calculator"]="Калькулятор", ["Build a trade manually and evaluate it"]="Соберите обмен вручную и оцените результат",
+        ["Item Database"]="База предметов", ["Every item with value and details"]="Все предметы, стоимость и характеристики",
+        ["Trade History"]="История обменов", ["Past trades with profit and loss"]="Прошлые обмены, прибыль и убыток",
+        ["Statistics"]="Статистика", ["Profit, activity and value over time"]="Прибыль, активность и изменение стоимости",
+        ["Settings"]="Настройки", ["Theme, behavior and data"]="Оформление, поведение и данные",
+        ["SYSTEM READY"]="СИСТЕМА ГОТОВА", ["UI test build · game integration is not connected yet"]="Тестовая версия интерфейса · связь с игрой ещё не подключена",
+        ["Quick actions"]="Быстрые действия", ["Modules"]="Модули", ["Recent trades"]="Последние обмены",
+        ["Trade Helper overlay"]="Панель помощника обмена", ["Item info and notifications in trades"]="Информация о предметах и уведомления во время обмена",
+        ["Inventory values"]="Стоимость инвентаря", ["Prices on your inventory items"]="Цены предметов в вашем инвентаре",
+        ["Auto price update"]="Автообновление цен", ["Refresh values in background"]="Обновлять значения в фоне",
+        ["Unfair trade warnings"]="Предупреждения о невыгодном обмене", ["Alert when a trade is bad for you"]="Предупреждать о невыгодном для вас обмене",
+        ["Live preview"]="Предпросмотр", ["Notifications"]="Уведомления", ["Trade requests"]="Запросы на обмен",
+        ["Alert when someone sends a trade"]="Уведомлять, когда вам предлагают обмен",
+        ["Item changes"]="Изменения предметов", ["Alert when items are added or removed"]="Уведомлять о добавлении и удалении предметов",
+        ["Trade result"]="Результат обмена", ["Alert when a trade is accepted or declined"]="Уведомлять, когда обмен принят или отклонён",
+        ["Test notification"]="Тест уведомления", ["Test"]="Тест", ["Test notification — alerts are working"]="Тестовое уведомление — оповещения работают",
+        ["Item information"]="Информация о предметах", ["Show value"]="Показывать стоимость",
+        ["Price next to each item"]="Цена рядом с каждым предметом", ["Show trend"]="Показывать тренд",
+        ["Rising / stable / falling arrow"]="Стрелка роста, стабильности или падения",
+        ["Show rarity tag"]="Показывать редкость", ["Show duplicates"]="Показывать количество одинаковых предметов",
+        ["Count of identical items"]="Количество одинаковых предметов", ["Display style"]="Стиль отображения",
+        ["Value display"]="Отображение стоимости", ["Currency"]="Валюта", ["Default currency"]="Валюта по умолчанию",
+        ["Number format"]="Формат чисел", ["Short = 12.5K · Full = 12,500"]="Краткий = 12,5K · Полный = 12 500",
+        ["Difference"]="Разница", ["How the gap between sides is shown"]="Как показывать разницу между сторонами",
+        ["Price sources"]="Источники цен", ["Warnings"]="Предупреждения", ["Warn on unfair trades"]="Предупреждать о невыгодных обменах",
+        ["Appearance"]="Внешний вид", ["Accent color"]="Акцентный цвет", ["UI scale"]="Масштаб интерфейса",
+        ["Applies when you release the slider"]="Применяется после отпускания ползунка",
+        ["Transparency"]="Прозрачность", ["Sidebar"]="Боковая панель", ["Auto collapses on narrow screens"]="Автоматически сворачивается на узких экранах",
+        ["Behavior"]="Поведение", ["Animations"]="Анимации", ["Tab transitions and tweens"]="Переходы между вкладками и анимация",
+        ["Toast messages inside the UI"]="Всплывающие сообщения в интерфейсе",
+        ["Show DEMO badges"]="Показывать метки ДЕМО", ["Mark non-connected elements"]="Помечать неподключённые функции",
+        ["Data"]="Данные", ["Valuation system"]="Система оценки", ["Used by Calculator and Checker"]="Используется в калькуляторе и проверке обмена",
+        ["Price sources are configured in Trade Helper."]="Источники цен настраиваются в разделе «Помощник обмена».",
+        ["About"]="О программе", ["Reset settings"]="Сбросить настройки", ["Close UI"]="Закрыть интерфейс",
+        ["Settings reset to defaults"]="Настройки сброшены", ["Tap ✕ again to close the UI"]="Нажмите ✕ ещё раз, чтобы закрыть интерфейс",
+        ["Gave  "]="Отдал: ", ["Got  "]="Получил: ", ["Nothing found"]="Ничего не найдено",
+        ["Demand: "]="Спрос: ", ["   ·   Trend: "]="   ·   Тренд: ", ["Obtained: "]="Источник: ",
+        ["Base value: "]="Базовая стоимость: ", ["NET PROFIT"]="ЧИСТАЯ ПРИБЫЛЬ", ["TRADES"]="ОБМЕНЫ",
+        ["WIN RATE"]="ДОЛЯ ПОБЕД", ["AVG / TRADE"]="СРЕДНЕЕ / ОБМЕН", ["BEST TRADE"]="ЛУЧШИЙ ОБМЕН",
+        ["Inventory value · 7 days"]="Стоимость инвентаря · 7 дней", ["Most valuable items"]="Самые ценные предметы",
+        ["wins  ·  "]="побед  ·  ", [" fair  ·  "]=" равных  ·  ", [" losses"]=" поражений",
+        ["vs yesterday"]="по сравнению со вчера", ["No real trades recorded yet. History will appear after trade detection is connected."]="Реальных обменов пока нет. История появится после подключения отслеживания обменов.",
+        ["Trade history"]="История обменов", ["NOT CONNECTED"]="НЕ ПОДКЛЮЧЕНО",
+        ["Export"]="Экспорт", ["Nothing to show"]="Пока нечего показывать",
+        ["All"]="Все", ["Godlies"]="Божественные", ["Ancients"]="Древние", ["Chromas"]="Хроматические",
+        ["Vintage"]="Винтажные", ["Pets"]="Питомцы", ["Uniques"]="Уникальные",
+        ["Low"]="Низкий", ["Medium"]="Средний", ["High"]="Высокий",
+        ["rising"]="Растёт", ["stable"]="Стабильно", ["falling"]="Падает",
+        ["Short"]="Краткий", ["Full"]="Полный", ["Absolute"]="Числом", ["Percent"]="В процентах", ["Both"]="Оба варианта",
+        ["Badge"]="Значок", ["Compact tag"]="Компактная метка", ["Side panel"]="Боковая панель",
+        ["Auto"]="Авто", ["Icons only"]="Только значки", ["Expanded"]="Развёрнутая",
+        ["Midnight"]="Полночь", ["Obsidian"]="Обсидиан", ["Abyss"]="Бездна", ["Graphite"]="Графит",
+        ["Supreme Value"]="Supreme Value", ["Community Avg"]="Среднее сообщества", ["Manual"]="Вручную",
+        ["Pure Value"]="Чистая стоимость", ["Rarity Weighted"]="С учётом редкости", ["Supreme Value (soon)"]="Supreme Value (скоро)",
+        ["Style: "]="Стиль: ", ["   ·   Currency: "]="   ·   Валюта: ", ["   ·   Format: "]="   ·   Формат: ",
+        ["TRADE WITH  "]="ОБМЕН С  ", ["⚠  Unfair trade — you lose "]="⚠  Невыгодный обмен — вы теряете ",
+        ["This page failed to build:\\n"]="Не удалось открыть страницу:\\n",
+    }
+    local function tr(value)
+        if type(value) ~= "string" then return value end
+        if RU[value] then return RU[value] end
+        local out = value
+        for en, ru in pairs(RU) do
+            if #en > 4 and out:find(en, 1, true) then out = out:gsub(en:gsub("([^%w])","%%%1"), ru) end
+        end
+        return out
+    end
+
     local function label(p, text, size, key, font, props)
-    	local o = new("TextLabel", { BackgroundTransparency = 1, Text = text, TextSize = size, Font = font or F.R, TextXAlignment = LEFT, TextWrapped = true }, nil)
+    	local o = new("TextLabel", { BackgroundTransparency = 1, Text = tr(text), TextSize = size, Font = font or F.R, TextXAlignment = LEFT, TextWrapped = true }, nil)
     	if not (props and props.Size) then o.Size = UDim2.new(1, 0, 0, 0); o.AutomaticSize = YA end
     	if props then for k, v in pairs(props) do o[k] = v end end
     	if typeof(key) == "Color3" then o.TextColor3 = key else bind(o, "TextColor3", key or "text") end
@@ -406,7 +479,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     function U.title(p, text, tag)
     	local h = box(p, UDim2.new(1, 0, 0, 18))
     	hlist(h, 8)
-    	label(h, string.upper(text), 11, "sub", F.B, { AutomaticSize = XA, Size = UDim2.new(0, 0, 1, 0), TextWrapped = false })
+    	label(h, string.upper(tr(text)), 11, "sub", F.B, { AutomaticSize = XA, Size = UDim2.new(0, 0, 1, 0), TextWrapped = false })
     	if tag then U.demoBadge(h, tag) end
     	return h
     end
@@ -417,8 +490,8 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	pad(r, 0, 3, 0, 3)
     	local left = box(r, UDim2.new(1, -(rw + 10), 0, 0), { AutomaticSize = YA })
     	vlist(left, 1)
-    	label(left, title, 13, "text", F.M)
-    	if desc then label(left, desc, 11, "sub", F.R) end
+    	label(left, tr(title), 13, "text", F.M)
+    	if desc then label(left, tr(desc), 11, "sub", F.R) end
     	return box(r, UDim2.fromOffset(rw, 28), { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0) })
     end
     
@@ -426,7 +499,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     function U.badge(p, text, key)
     	local f = new("Frame", { AutomaticSize = XA, Size = UDim2.fromOffset(0, 16), BorderSizePixel = 0 }, p)
     	corner(f, 8); pad(f, 7, 0, 7, 0)
-    	local t = new("TextLabel", { AutomaticSize = XA, Size = UDim2.new(0, 0, 1, 0), BackgroundTransparency = 1, Text = text, TextSize = 9, Font = F.B }, f)
+    	local t = new("TextLabel", { AutomaticSize = XA, Size = UDim2.new(0, 0, 1, 0), BackgroundTransparency = 1, Text = tr(text), TextSize = 9, Font = F.B }, f)
     	reg(f, function()
     		local c = getColor(key or "warn")
     		f.BackgroundColor3 = c:Lerp(getColor("card"), 0.8)
@@ -443,7 +516,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     
     function U.button(p, text, kind, cb, size)
     	kind = kind or "ghost"
-    	local b = new("TextButton", { AutoButtonColor = false, Text = text, Font = F.B, TextSize = 12, Size = size or UDim2.fromOffset(110, 32), BorderSizePixel = 0 }, p)
+    	local b = new("TextButton", { AutoButtonColor = false, Text = tr(text), Font = F.B, TextSize = 12, Size = size or UDim2.fromOffset(110, 32), BorderSizePixel = 0 }, p)
     	corner(b, 9)
     	local bg, hov = WHITE, WHITE
     	reg(b, function()
@@ -501,7 +574,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	corner(f, 10); bind(f, "BackgroundColor3", "card2"); stroke(f, "stroke", 1)
     	local tb = new("TextBox", {
     		BackgroundTransparency = 1, Size = UDim2.new(1, -24, 1, 0), Position = UDim2.fromOffset(12, 0), Text = "",
-    		PlaceholderText = placeholder, ClearTextOnFocus = false, Font = F.M, TextSize = 13, TextXAlignment = LEFT,
+    		PlaceholderText = tr(placeholder), ClearTextOnFocus = false, Font = F.M, TextSize = 13, TextXAlignment = LEFT,
     	}, f)
     	bind(tb, "TextColor3", "text"); bind(tb, "PlaceholderColor3", "sub")
     	tb:GetPropertyChangedSignal("Text"):Connect(function() cb(tb.Text) end)
@@ -583,10 +656,10 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	width = width or 130
     	local b = new("TextButton", { AutoButtonColor = false, Text = "", Size = UDim2.fromOffset(width, 28), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), BorderSizePixel = 0 }, p)
     	corner(b, 8); bind(b, "BackgroundColor3", "card2"); stroke(b, "stroke", 1)
-    	local txt = label(b, current, 12, "text", F.M, { Size = UDim2.new(1, -28, 1, 0), Position = UDim2.fromOffset(10, 0), TextTruncate = AT_END, TextWrapped = false })
+    	local txt = label(b, tr(current), 12, "text", F.M, { Size = UDim2.new(1, -28, 1, 0), Position = UDim2.fromOffset(10, 0), TextTruncate = AT_END, TextWrapped = false })
     	label(b, "▾", 11, "sub", F.B, { Size = UDim2.fromOffset(18, 28), Position = UDim2.new(1, -20, 0, 0), TextXAlignment = CENTER })
     	local obj = {}
-    	function obj.set(v) current = v; txt.Text = v end
+    	function obj.set(v) current = v; txt.Text = tr(v) end
     	b.Activated:Connect(function()
     		U.closeDD()
     		local catcher = new("TextButton", { Text = "", AutoButtonColor = false, BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1) }, overlay)
@@ -611,7 +684,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     		for _, opt in ipairs(options) do
     			local sel = (opt == current)
     			local ob = new("TextButton", {
-    				Text = opt, AutoButtonColor = false, Font = sel and F.B or F.M, TextSize = 12, Size = UDim2.new(1, 0, 0, 28),
+    				Text = tr(opt), AutoButtonColor = false, Font = sel and F.B or F.M, TextSize = 12, Size = UDim2.new(1, 0, 0, 28),
     				BorderSizePixel = 0, BackgroundTransparency = 1, TextXAlignment = LEFT, TextColor3 = sel and getColor("accent") or getColor("text"),
     			}, pop)
     			pad(ob, 10, 0, 6, 0)
@@ -630,6 +703,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     
     -- toast -----------------------------------------------------------------------------
     function U.toast(text, kind, force)
+        text = tr(text)
     	if (not S.notifications and not force) or not toastHolder then return end
     	local key = (kind == "good" or kind == "bad" or kind == "warn") and kind or "accent"
     	local kids = toastHolder:GetChildren()
@@ -780,7 +854,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     local pageSub = label(topbar, "", 10, "sub", F.M, { Size = UDim2.new(1, -150, 0, 14), Position = UDim2.fromOffset(14, 26), TextTruncate = AT_END, TextWrapped = false })
     local tools = box(topbar, UDim2.fromOffset(0, 28), { AutomaticSize = XA, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0) })
     hlist(tools, 6)
-    local protoBadge = U.badge(tools, "PROTOTYPE " .. VERSION, "accent")
+    local protoBadge = U.badge(tools, "ПРОТОТИП " .. VERSION, "accent")
     local minBtn = U.button(tools, "–", "ghost", function() end, UDim2.fromOffset(28, 28))
     local closeBtn = U.button(tools, "✕", "danger", function() end, UDim2.fromOffset(28, 28))
     
@@ -817,64 +891,42 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     		target.Position.Y.Scale, target.Position.Y.Offset + (y - p.Y) / scale)
     end
 
-    local function makeDraggable(handle, target, onTap)
-        -- Touch movement is polled from GetTouches because some mobile executors do not
-        -- consistently forward TouchMoved. InputBegan still starts the gesture globally.
-        local dragging, moved, startIn, startPos = false, false, nil, nil
-        local activeTouchId, mouseDown = nil, false
-
-        connect(UserInputService.InputBegan, function(i)
-            local kind = i.UserInputType
-            if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then return end
-            if not handle.Visible or not pointInside(handle, i.Position) then return end
-            dragging, moved = true, false
-            activeTouchId = kind == Enum.UserInputType.Touch and i.TouchId or nil
-            mouseDown = kind == Enum.UserInputType.MouseButton1
-            startIn, startPos = i.Position, target.Position
-        end)
-
-        local function applyMove(position)
-            if not dragging or not startIn or not startPos then return end
-            local d = position - startIn
-            if d.Magnitude > 2 then moved = true end
-            if moved then
-                local scale = dragScale()
-                target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X / scale,
-                    startPos.Y.Scale, startPos.Y.Offset + d.Y / scale)
-                clampOnScreen(target, 0)
-            end
+    local function makeDraggable(handle, target)
+        -- Use the GUI object's own input event for touch start; follow the same touch
+        -- InputObject through UIS events. This avoids global hit-test/input routing issues.
+        local dragging, dragInput, startInput, startPos = false, nil, nil, nil
+        local function moveTo(pos)
+            if not dragging or not startInput or not startPos then return end
+            local delta = pos - startInput
+            if delta.Magnitude < 2 then return end
+            local scale = dragScale()
+            target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X / scale,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y / scale)
+            clampOnScreen(target, 0)
         end
-
-        -- Keep the event path as a fast path; RenderStepped polling below is the fallback.
-        connect(UserInputService.TouchMoved, function(i)
-            if activeTouchId ~= nil and i.TouchId == activeTouchId then
-                applyMove(i.Position)
+        handle.InputBegan:Connect(function(input)
+            local kind = input.UserInputType
+            if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then return end
+            dragging, dragInput = true, input
+            startInput, startPos = input.Position, target.Position
+        end)
+        connect(UserInputService.InputChanged, function(input)
+            if not dragging then return end
+            if input == dragInput or (dragInput and input.UserInputType == Enum.UserInputType.Touch
+                and input.TouchId == dragInput.TouchId) then
+                moveTo(input.Position)
+            elseif dragInput and dragInput.UserInputType == Enum.UserInputType.MouseButton1
+                and input.UserInputType == Enum.UserInputType.MouseMovement then
+                moveTo(input.Position)
             end
         end)
-        connect(UserInputService.InputChanged, function(i)
-            if mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement then
-                applyMove(i.Position)
-            end
-        end)
-        connect(game:GetService("RunService").RenderStepped, function()
-            if not dragging or activeTouchId == nil then return end
-            local ok, touches = pcall(function() return UserInputService:GetTouches() end)
-            if not ok or type(touches) ~= "table" then return end
-            for _, touch in ipairs(touches) do
-                if touch.TouchId == activeTouchId then
-                    applyMove(touch.Position)
-                    return
-                end
-            end
-        end)
-        connect(UserInputService.InputEnded, function(i)
-            local ended = (activeTouchId ~= nil and i.UserInputType == Enum.UserInputType.Touch
-                    and i.TouchId == activeTouchId)
-                or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1)
-            if dragging and ended then
-                dragging, activeTouchId, mouseDown = false, nil, false
-                if not moved and onTap then onTap() end
-            end
+        connect(UserInputService.InputEnded, function(input)
+            if not dragging or not dragInput then return end
+            local ended = input == dragInput
+                or (input.UserInputType == Enum.UserInputType.Touch and dragInput.UserInputType == Enum.UserInputType.Touch
+                    and input.TouchId == dragInput.TouchId)
+                or (input.UserInputType == Enum.UserInputType.MouseButton1 and dragInput.UserInputType == Enum.UserInputType.MouseButton1)
+            if ended then dragging, dragInput, startInput, startPos = false, nil, nil, nil end
         end)
     end
     local minimized = false
@@ -908,7 +960,8 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     -- registered separately, preventing two or more touch handlers moving the same window.
     makeDraggable(topbar, win)
     makeDraggable(logo, win)
-    makeDraggable(fab, fab, function() setOpen(true) end)
+    -- A real Activated binding is essential: a tap on the floating button must reopen the UI.
+    fab.Activated:Connect(function() if minimized then setOpen(true) end end)
     minBtn.Activated:Connect(function() setOpen(false) end)
     connect(UserInputService.InputBegan, function(i, gp)
     	if not gp and i.KeyCode == Enum.KeyCode.RightShift then setOpen(minimized) end
@@ -956,10 +1009,10 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	corner(dot, 4)
     	label(st, "SYSTEM READY", 10, SEM.good, F.B, { AutomaticSize = XA, Size = UDim2.new(0, 0, 1, 0), TextWrapped = false })
     	label(hero, "MM2 Trade Helper", 20, "text", F.B)
-    	label(hero, "UI test build · game integration is not connected yet", 11, "sub", F.M)
+    	label(hero, "Тестовая версия · связь с игрой ещё не подключена", 11, "sub", F.M)
     	local tags = box(hero, UDim2.new(1, 0, 0, 18))
     	hlist(tags, 6)
-    	U.badge(tags, "UI " .. VERSION, "accent"); U.demoBadge(tags, "SAMPLE DATA")
+    	U.badge(tags, "ИНТЕРФЕЙС " .. VERSION, "accent"); U.demoBadge(tags, "ТЕСТОВЫЕ ДАННЫЕ")
     
     	local gs = grid(sc, 125, 70, 8)
     	local sItems = U.stat(gs, "ITEMS", "▤")
@@ -1397,7 +1450,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local sCnt = U.stat(sg, "TRADES", "↻")
     	local sWin = U.stat(sg, "WIN RATE", "▲")
     
-    	local bar = U.title(sc, "Trade history", "NOT CONNECTED")
+    	local bar = U.title(sc, "Trade history", "НЕ ПОДКЛЮЧЕНО")
     	U.demoButton(bar, "Export", "ghost", UDim2.fromOffset(70, 22))
     	local list = box(sc, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
     	vlist(list, 6)
@@ -1626,8 +1679,8 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local old = current and pages[current]
     	current = id
     	local e = ensurePage(def)
-    	pageTitle.Text = def.title
-    	pageSub.Text = def.sub
+    	pageTitle.Text = tr(def.title)
+    	pageSub.Text = tr(def.sub)
     	for _, f in ipairs(navPaints) do f() end
     	navToken = navToken + 1
     	if old and old ~= e then
@@ -1650,7 +1703,7 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	local ind = new("Frame", { Size = UDim2.fromOffset(3, 18), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), BorderSizePixel = 0 }, b)
     	corner(ind, 2)
     	local ic = new("TextLabel", { BackgroundTransparency = 1, Text = def.icon, Font = F.B, TextSize = 16, Size = UDim2.fromOffset(30, 38) }, b)
-    	local nm = label(b, def.title, 12, "sub", F.M, { Size = UDim2.new(1, -44, 1, 0), Position = UDim2.fromOffset(38, 0), TextTruncate = AT_END, TextWrapped = false })
+    	local nm = label(b, tr(def.title), 12, "sub", F.M, { Size = UDim2.new(1, -44, 1, 0), Position = UDim2.fromOffset(38, 0), TextTruncate = AT_END, TextWrapped = false })
     	local function paint()
     		local a = (current == def.id)
     		b.BackgroundColor3 = getColor("accentSoft")
