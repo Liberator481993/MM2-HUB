@@ -998,3 +998,702 @@ local function buildHelper(sc)
 				if S.showValue then s = s .. "  ·  " .. fmt(unitValue(e[1]) * e[2]) end
 				if S.showTrend and it then s = s .. "  " .. it.trendG end
 				lines[i].Text = s
+			else
+				lines[i].Text = ""
+			end
+		end
+		local give, get = sumList(t.mine), sumList(t.theirs)
+		local v, diff, pct = verdict(give, get)
+		sum.Text = v .. "   " .. diffText(diff, pct)
+		sum.TextColor3 = getColor(VColor[v])
+		if S.warn and v == "LOSE" and -pct >= S.warnPct then
+			warnL.Visible = true
+			warnL.Text = "⚠  Unfair trade — you lose " .. string.format("%.0f%%", -pct)
+		else
+			warnL.Visible = false
+		end
+	end
+	Bus.on("values", refresh)
+
+	local function setting(key, v) S[key] = v; save(); refresh() end
+
+	title(sc, "Notifications")
+	local c1 = card(sc, 12)
+	toggle(row(c1, "Trade requests", "Alert when someone sends a trade", 50), S.notifTrade, function(v) setting("notifTrade", v) end)
+	toggle(row(c1, "Item changes", "Alert when items are added or removed", 50), S.notifItems, function(v) setting("notifItems", v) end)
+	toggle(row(c1, "Trade result", "Alert when a trade is accepted or declined", 50), S.notifResult, function(v) setting("notifResult", v) end)
+	rightAnchor(U.button(row(c1, "Test notification", nil, 84), "Test", "soft", function() U.toast("Test notification — alerts are working", "good", true) end, UDim2.fromOffset(84, 28)))
+
+	title(sc, "Item information")
+	local c2 = card(sc, 12)
+	toggle(row(c2, "Show value", "Price next to each item", 50), S.showValue, function(v) setting("showValue", v) end)
+	toggle(row(c2, "Show trend", "Rising / stable / falling arrow", 50), S.showTrend, function(v) setting("showTrend", v) end)
+	toggle(row(c2, "Show rarity tag", nil, 50), S.showRarity, function(v) setting("showRarity", v) end)
+	toggle(row(c2, "Show duplicates", "Count of identical items", 50), S.showDupes, function(v) setting("showDupes", v) end)
+	dropdown(row(c2, "Display style", nil, 140), { "Badge", "Compact tag", "Side panel" }, S.displayMode, function(v) setting("displayMode", v) end, 140)
+
+	title(sc, "Value display")
+	local c3 = card(sc, 12)
+	local cd = dropdown(row(c3, "Currency", nil, 130), CurrencyOrder, S.currency, function(v) setCurrency(v) end, 130)
+	currencyDDs[#currencyDDs + 1] = cd
+	dropdown(row(c3, "Number format", "Short = 12.5K · Full = 12,500", 130), { "Short", "Full" }, S.numFormat, function(v) S.numFormat = v; save(); Bus.fire("values") end, 130)
+	dropdown(row(c3, "Difference", "How the gap between sides is shown", 130), { "Absolute", "Percent", "Both" }, S.diffMode, function(v) S.diffMode = v; save(); Bus.fire("values") end, 130)
+	label(c3, "Price sources", 13, "text", F.M)
+	local strip = U.chipRow(c3)
+	local setters = {}
+	for _, name in ipairs(SourceOrder) do
+		local _, set = U.chip(strip, name, S.sources[name], function()
+			local count = 0
+			for _, v in pairs(S.sources) do if v then count = count + 1 end end
+			if S.sources[name] and count <= 1 then U.toast("Keep at least one price source enabled", "warn", true); return end
+			S.sources[name] = not S.sources[name]
+			setters[name](S.sources[name]); save()
+		end)
+		setters[name] = set
+	end
+	label(c3, "Sources are labels for now — real price fetching plugs in through Bridge.", 10, "sub", F.R)
+
+	title(sc, "Warnings")
+	local c4 = card(sc, 12)
+	toggle(row(c4, "Warn on unfair trades", nil, 50), S.warn, function(v) setting("warn", v) end)
+	slider(row(c4, "Warn when losing over", nil, 170), 0, 50, S.warnPct, 1, function(v) setting("warnPct", v) end, { fmt = function(v) return v .. "%" end })
+	slider(row(c4, "Fair range ±", "Within this gap = FAIR", 170), 0, 15, S.fairPct, 1, function(v) S.fairPct = v; save(); Bus.fire("values") end, { fmt = function(v) return v .. "%" end })
+	refresh()
+end
+
+------------------------------------------------ Trade Checker
+local function buildChecker(sc)
+	local card, title = U.card, U.title
+	local idx = 1
+	local trade = deepCopy(Bridge.GetSample(1))
+
+	local vc = card(sc, 14)
+	local top = box(vc, UDim2.new(1, 0, 0, 56))
+	local vL = label(top, "FAIR", 30, SEM.warn, F.B, { Size = UDim2.new(0.55, 0, 0, 36), TextWrapped = false })
+	local vD = label(top, "", 12, "sub", F.M, { Size = UDim2.new(1, 0, 0, 16), Position = UDim2.fromOffset(0, 38), TextWrapped = false })
+	local sysDD = U.dropdown(top, Systems, S.system, function(v)
+		S.system = v; save()
+		if v:find("soon") then U.toast("Supreme Value isn't connected yet — using Pure Value", "warn", true) end
+		Bus.fire("values")
+	end, 150)
+	sysDD.frame.Position = UDim2.new(1, 0, 0, 14)
+	local tot = label(vc, "", 11, "sub", F.M)
+
+	local btns = box(sc, UDim2.new(1, 0, 0, 32))
+	hlist(btns, 8)
+	local render
+	U.button(btns, "Next sample", "soft", function()
+		idx = (idx % #DemoTrades) + 1
+		trade = deepCopy(Bridge.GetSample(idx)); render()
+	end, UDim2.fromOffset(104, 30))
+	U.button(btns, "Clear", "ghost", function() trade = { theirs = {}, mine = {} }; render() end, UDim2.fromOffset(70, 30))
+	U.demoButton(btns, "Auto-detect", "ghost", UDim2.fromOffset(104, 30))
+
+	local sp, spRec = U.split(sc)
+	local function side(titleText)
+		local c = card(sp, 12)
+		local total = mkRowsTitle(c, titleText, "")
+		local list = box(c, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+		vlist(list, 5)
+		return list, total
+	end
+	local giveList, giveTot = side("YOU GIVE")
+	local getList, getTot = side("YOU GET")
+	spRec.apply()
+
+	local function fill(container, totalLbl, list)
+		clear(container)
+		local m = mergeList(list)
+		if #m == 0 then label(container, "No items", 11, "sub", F.M) end
+		for _, e in ipairs(m) do U.lineRow(container, e[1], e[2]) end
+		totalLbl.Text = fmt(sumList(list))
+	end
+	render = function()
+		fill(giveList, giveTot, trade.mine); fill(getList, getTot, trade.theirs)
+		local give, get = sumList(trade.mine), sumList(trade.theirs)
+		local v, diff, pct = verdict(give, get)
+		vL.Text = v; vL.TextColor3 = getColor(VColor[v])
+		vD.Text = diffText(diff, pct)
+		tot.Text = "Give " .. fmt(give) .. "   ·   Get " .. fmt(get) .. "   ·   " .. S.system
+	end
+	Bus.on("values", function() sysDD.set(S.system); render() end)
+
+	title(sc, "Integration point", "SLOT")
+	local slot = card(sc, 12)
+	local st = new("UIStroke", { Thickness = 1, Transparency = 0.2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, slot)
+	bind(st, "Color", "accent")
+	label(slot, "Supreme Trade Checker plugs in here", 12, "text", F.B)
+	label(slot, "Feed the real trade through Bridge.GetSample(): { theirs = {{name, qty}}, mine = {{name, qty}} }, then fire Bus 'values'. Totals, duplicates and the verdict update automatically.", 11, "sub", F.R)
+	render()
+end
+
+------------------------------------------------ Inventory
+local function buildInventory(sc)
+	local card = U.card
+	local q, cat, sort = "", "All", "Value ↓"
+
+	local sum = card(sc, 14)
+	local sTop = box(sum, UDim2.new(1, 0, 0, 44))
+	local big = label(sTop, "", 24, "text", F.B, { Size = UDim2.new(1, -96, 0, 30), TextWrapped = false })
+	local sub = label(sTop, "", 11, "sub", F.M, { Size = UDim2.new(1, -96, 0, 14), Position = UDim2.fromOffset(0, 30), TextWrapped = false })
+	rightAnchor(U.demoButton(sTop, "Refresh", "ghost", UDim2.fromOffset(84, 28)))
+
+	U.search(sc, "Search inventory…", function(t) q = t:lower(); Bus.fire("invfilter") end)
+	local srow = box(sc, UDim2.new(1, 0, 0, 28))
+	label(srow, "Sort by", 12, "sub", F.M, { Size = UDim2.new(0.5, 0, 1, 0) })
+	U.dropdown(srow, { "Value ↓", "Name A–Z", "Rarity" }, sort, function(v) sort = v; Bus.fire("invfilter") end, 130)
+
+	local strip = U.chipRow(sc)
+	local setters = {}
+	local function addChip(name)
+		local _, set = U.chip(strip, name, name == cat, function()
+			cat = name
+			for n, s in pairs(setters) do s(n == cat) end
+			Bus.fire("invfilter")
+		end)
+		setters[name] = set
+	end
+	addChip("All")
+	for _, c in ipairs(Cats) do addChip(c) end
+
+	local gridF = U.grid(sc, 150, 70, 8)
+	local function render()
+		clear(gridF)
+		local list, n, total, uniq = {}, 0, 0, 0
+		for _, e in ipairs(Bridge.GetInventory()) do
+			local it = DBIndex[e[1]]
+			n = n + e[2]; uniq = uniq + 1; total = total + unitValue(e[1]) * e[2]
+			if it and (cat == "All" or it.cat == cat) and (q == "" or it.name:lower():find(q, 1, true)) then list[#list + 1] = { it, e[2] } end
+		end
+		table.sort(list, function(a, b)
+			if sort == "Name A–Z" then return a[1].name < b[1].name end
+			if sort == "Rarity" then
+				local ra, rb = RarityRank[a[1].rarity] or 0, RarityRank[b[1].rarity] or 0
+				if ra ~= rb then return ra > rb end
+			elseif unitValue(a[1].name) ~= unitValue(b[1].name) then
+				return unitValue(a[1].name) > unitValue(b[1].name)
+			end
+			return a[1].name < b[1].name
+		end)
+		big.Text = fmt(total)
+		sub.Text = n .. " items  ·  " .. uniq .. " unique  ·  showing " .. #list
+		for _, e in ipairs(list) do U.itemCard(gridF, e[1], e[2]) end
+	end
+	Bus.on("invfilter", render); Bus.on("values", render); Bus.on("inventory", render)
+	render()
+end
+
+------------------------------------------------ Calculator
+local function buildCalc(sc)
+	local card, title = U.card, U.title
+	local calc = { give = {}, get = {} }
+	local cur = S.currency
+
+	local rc = card(sc, 14)
+	local top = box(rc, UDim2.new(1, 0, 0, 56))
+	local vL = label(top, "FAIR", 30, SEM.warn, F.B, { Size = UDim2.new(0.55, 0, 0, 36), TextWrapped = false })
+	local vD = label(top, "", 12, "sub", F.M, { Size = UDim2.new(1, 0, 0, 16), Position = UDim2.fromOffset(0, 38), TextWrapped = false })
+	local curDD = U.dropdown(top, CurrencyOrder, cur, function(v) cur = v; Bus.fire("calc") end, 110)
+	curDD.frame.Position = UDim2.new(1, 0, 0, 14)
+	local tot = label(rc, "", 11, "sub", F.M)
+
+	local btns = box(sc, UDim2.new(1, 0, 0, 32))
+	hlist(btns, 8)
+	local render
+	U.button(btns, "⇅  Swap sides", "soft", function() calc.give, calc.get = calc.get, calc.give; render() end, UDim2.fromOffset(112, 30))
+	U.button(btns, "Reset", "ghost", function() calc.give, calc.get = {}, {}; render() end, UDim2.fromOffset(70, 30))
+
+	local sp, spRec = U.split(sc)
+	local function side(titleText)
+		local c = card(sp, 12)
+		local total = mkRowsTitle(c, titleText, "")
+		local list = box(c, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+		vlist(list, 5)
+		return list, total
+	end
+	local giveList, giveTot = side("YOU GIVE")
+	local getList, getTot = side("YOU GET")
+	spRec.apply()
+
+	local function fill(container, totalLbl, key)
+		clear(container)
+		local list = calc[key]
+		if #list == 0 then label(container, "Add items below", 11, "sub", F.M) end
+		for i, e in ipairs(list) do
+			U.lineRow(container, e[1], e[2], {
+				edit = true, cur = cur,
+				onQty = function(d) e[2] = e[2] + d; if e[2] < 1 then table.remove(list, i) end; render() end,
+				onRemove = function() table.remove(list, i); render() end,
+			})
+		end
+		totalLbl.Text = fmt(sumList(list), cur)
+	end
+	render = function()
+		fill(giveList, giveTot, "give"); fill(getList, getTot, "get")
+		local give, get = sumList(calc.give), sumList(calc.get)
+		local v, diff, pct = verdict(give, get)
+		vL.Text = v; vL.TextColor3 = getColor(VColor[v])
+		vD.Text = diffText(diff, pct, cur)
+		tot.Text = "Give " .. fmt(give, cur) .. "   ·   Get " .. fmt(get, cur) .. "   ·   " .. S.system
+	end
+
+	title(sc, "Add items")
+	local pk = card(sc, 12)
+	local results = box(pk, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+	vlist(results, 4)
+	local query = ""
+	local function add(key, name)
+		for _, e in ipairs(calc[key]) do if e[1] == name then e[2] = e[2] + 1; render(); return end end
+		table.insert(calc[key], { name, 1 }); render()
+	end
+	local function renderPicker()
+		clear(results)
+		local found = {}
+		for _, it in ipairs(DB) do
+			if query == "" or it.name:lower():find(query, 1, true) then found[#found + 1] = it end
+		end
+		table.sort(found, function(a, b) return a.value > b.value end)
+		for i = 1, math.min(6, #found) do
+			local it = found[i]
+			local r = new("Frame", { Size = UDim2.new(1, 0, 0, 40), BorderSizePixel = 0 }, results)
+			corner(r, 9); bind(r, "BackgroundColor3", "card2")
+			U.monogram(r, it, 28).Position = UDim2.fromOffset(6, 6)
+			label(r, it.name, 12, "text", F.B, { Size = UDim2.new(1, -150, 0, 16), Position = UDim2.fromOffset(40, 5), TextTruncate = AT_END, TextWrapped = false })
+			label(r, fmt(unitValue(it.name), cur), 10, "accent", F.M, { Size = UDim2.new(1, -150, 0, 14), Position = UDim2.fromOffset(40, 21), TextWrapped = false })
+			local bb = box(r, UDim2.fromOffset(100, 24), { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0) })
+			hlist(bb, 4)
+			U.button(bb, "Give", "ghost", function() add("give", it.name) end, UDim2.fromOffset(48, 24))
+			U.button(bb, "Get", "soft", function() add("get", it.name) end, UDim2.fromOffset(48, 24))
+		end
+		if #found == 0 then label(results, "No matches", 11, "sub", F.M) end
+	end
+	local sb = U.search(pk, "Search item to add…", function(t) query = t:lower(); renderPicker() end)
+	sb.LayoutOrder = -1
+	renderPicker()
+	Bus.on("calc", function() renderPicker(); render() end)
+	Bus.on("values", function() renderPicker(); render() end)
+	render()
+end
+
+------------------------------------------------ Item Database
+local function buildDatabase(sc)
+	local card = U.card
+	local q, cat = "", "All"
+
+	local hc = card(sc, 12)
+	local ht = box(hc, UDim2.new(1, 0, 0, 36))
+	local count = label(ht, "", 13, "text", F.B, { Size = UDim2.new(1, -120, 0, 18), TextWrapped = false })
+	local stamp = label(ht, "Sample data · not live", 10, "sub", F.M, { Size = UDim2.new(1, -120, 0, 14), Position = UDim2.fromOffset(0, 20), TextWrapped = false })
+	local upd = rightAnchor(U.button(ht, "Update", "primary", nil, UDim2.fromOffset(100, 30)))
+	local bar = new("Frame", { Size = UDim2.new(1, 0, 0, 3), BorderSizePixel = 0 }, hc)
+	corner(bar, 2); bind(bar, "BackgroundColor3", "card2")
+	local fill = new("Frame", { Size = UDim2.new(0, 0, 1, 0), BorderSizePixel = 0 }, bar)
+	corner(fill, 2); bind(fill, "BackgroundColor3", "accent")
+	local busy = false
+	upd.Activated:Connect(function()
+		if busy then return end
+		busy = true; upd.Text = "Updating…"
+		fill.Size = UDim2.new(0, 0, 1, 0)
+		tween(fill, { Size = UDim2.new(1, 0, 1, 0) }, 1.4, Enum.EasingStyle.Sine)
+		Bridge.UpdateDatabase(function(ok)
+			busy = false; upd.Text = "Update"
+			stamp.Text = "Simulated update · just now"
+			Bus.fire("values")
+			U.toast(ok and "Database refreshed (demo prices moved slightly)" or "Update failed", ok and "good" or "bad", true)
+		end)
+	end)
+
+	U.search(sc, "Search all items…", function(t) q = t:lower(); Bus.fire("dbfilter") end)
+	local strip = U.chipRow(sc)
+	local setters = {}
+	local function addChip(name)
+		local _, set = U.chip(strip, name, name == cat, function()
+			cat = name
+			for n, s in pairs(setters) do s(n == cat) end
+			Bus.fire("dbfilter")
+		end)
+		setters[name] = set
+	end
+	addChip("All")
+	for _, c in ipairs(Cats) do addChip(c) end
+
+	local list = box(sc, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+	vlist(list, 5)
+	local function render()
+		clear(list)
+		local n = 0
+		for _, it in ipairs(Bridge.GetItemDB()) do
+			if (cat == "All" or it.cat == cat) and (q == "" or it.name:lower():find(q, 1, true)) then
+				n = n + 1
+				local f = new("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = YA, BorderSizePixel = 0 }, list)
+				corner(f, 10); bind(f, "BackgroundColor3", "card"); stroke(f, "stroke", 1, 0.35); vlist(f, 0)
+				local head = new("TextButton", { Text = "", AutoButtonColor = false, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 48) }, f)
+				U.monogram(head, it, 32).Position = UDim2.fromOffset(8, 8)
+				label(head, it.name, 12, "text", F.B, { Size = UDim2.new(1, -140, 0, 16), Position = UDim2.fromOffset(48, 8), TextTruncate = AT_END, TextWrapped = false })
+				label(head, it.rarity .. " · " .. it.cat, 10, RarityColor[it.rarity] or WHITE, F.M, { Size = UDim2.new(1, -140, 0, 14), Position = UDim2.fromOffset(48, 26), TextTruncate = AT_END, TextWrapped = false })
+				label(head, fmt(unitValue(it.name)), 12, "accent", F.B, { Size = UDim2.fromOffset(80, 16), Position = UDim2.new(1, -26, 0, 8), AnchorPoint = Vector2.new(1, 0), TextXAlignment = RIGHT, TextWrapped = false })
+				label(head, it.trendG .. " " .. it.trendT, 10, "sub", F.M, { Size = UDim2.fromOffset(80, 14), Position = UDim2.new(1, -26, 0, 26), AnchorPoint = Vector2.new(1, 0), TextXAlignment = RIGHT, TextWrapped = false })
+				local chev = label(head, "›", 16, "sub", F.B, { Size = UDim2.fromOffset(16, 48), Position = UDim2.new(1, -4, 0, 0), AnchorPoint = Vector2.new(1, 0), TextXAlignment = CENTER })
+				local det = box(f, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA, Visible = false })
+				pad(det, 12, 0, 12, 10); vlist(det, 2)
+				label(det, "Demand: " .. it.demand .. "   ·   Trend: " .. it.trendG .. " " .. it.trendT, 11, "sub", F.M)
+				label(det, "Obtained: " .. it.origin, 11, "sub", F.M)
+				label(det, "Base value: " .. fmt(it.value, "Value") .. "   ≈ " .. fmt(it.value, "USD") .. " / " .. fmt(it.value, "Robux"), 11, "sub", F.M)
+				head.Activated:Connect(function()
+					det.Visible = not det.Visible
+					chev.Text = det.Visible and "⌄" or "›"
+				end)
+			end
+		end
+		count.Text = n .. " items"
+		if n == 0 then label(list, "Nothing found", 12, "sub", F.M, { TextXAlignment = CENTER }) end
+	end
+	Bus.on("dbfilter", render); Bus.on("values", render)
+	render()
+end
+
+------------------------------------------------ Trade History
+local function buildHistory(sc)
+	local card, title = U.card, U.title
+	local sg = U.grid(sc, 125, 70, 8)
+	local sPL = U.stat(sg, "NET PROFIT", "◆")
+	local sCnt = U.stat(sg, "TRADES", "↻")
+	local sWin = U.stat(sg, "WIN RATE", "▲")
+
+	local bar = U.title(sc, "Sample history", "SAMPLE")
+	U.demoButton(bar, "Export", "ghost", UDim2.fromOffset(70, 22))
+	local list = box(sc, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+	vlist(list, 6)
+
+	local function render()
+		clear(list)
+		local hist = Bridge.GetHistory()
+		local pl, wins = 0, 0
+		for _, h in ipairs(hist) do
+			local p = h.getV - h.giveV
+			pl = pl + p
+			if p > 0 then wins = wins + 1 end
+			U.historyRow(list, h)
+		end
+		sPL(sfmt(pl), (pl > 0) and "good" or ((pl < 0) and "bad" or nil))
+		sCnt(tostring(#hist))
+		sWin(#hist > 0 and string.format("%d%%", math.floor(wins / #hist * 100 + 0.5)) or "–")
+	end
+	Bus.on("values", render)
+	render()
+end
+
+------------------------------------------------ Statistics
+local function buildStats(sc)
+	local card, title = U.card, U.title
+	local sg = U.grid(sc, 125, 70, 8)
+	local sPL = U.stat(sg, "NET PROFIT", "◆")
+	local sCnt = U.stat(sg, "TRADES", "↻")
+	local sAvg = U.stat(sg, "AVG / TRADE", "∑")
+	local sBest = U.stat(sg, "BEST TRADE", "▲")
+
+	title(sc, "Inventory value · 7 days", "SAMPLE")
+	local ch = card(sc, 14)
+	local delta = label(ch, "", 12, SEM.good, F.B)
+	local area = box(ch, UDim2.new(1, 0, 0, 130))
+	local days = { "Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Today" }
+	local n = #days
+	local bars = {}
+	for i = 1, n do
+		local col = box(area, UDim2.new(1 / n, 0, 1, -16), { Position = UDim2.new((i - 1) / n, 0, 0, 0) })
+		local b = new("Frame", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(0.56, 0, 0, 0), BorderSizePixel = 0 }, col)
+		corner(b, 5); bind(b, "BackgroundColor3", (i == n) and "accent" or "stroke")
+		bars[i] = b
+		label(area, days[i], 9, "sub", F.M, { Size = UDim2.new(1 / n, 0, 0, 14), Position = UDim2.new((i - 1) / n, 0, 1, -14), TextXAlignment = CENTER, TextWrapped = false })
+	end
+
+	title(sc, "Win / Fair / Lose", "SAMPLE")
+	local wc = card(sc, 12)
+	local seg = box(wc, UDim2.new(1, 0, 0, 10))
+	local segs = {}
+	for i, key in ipairs({ "good", "warn", "bad" }) do
+		local f = new("Frame", { BorderSizePixel = 0, Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = SEM[key] }, seg)
+		corner(f, 3); segs[i] = f
+	end
+	local wl = label(wc, "", 11, "sub", F.M)
+
+	title(sc, "Most valuable items")
+	local tc = card(sc, 12)
+	local tops = box(tc, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+	vlist(tops, 8)
+
+	local series = { 1210, 1260, 1245, 1330, 1310, 1405, 0 }
+	local function render()
+		local hist = Bridge.GetHistory()
+		local pl, best, w, fa, lo = 0, -1e9, 0, 0, 0
+		for _, h in ipairs(hist) do
+			local p = h.getV - h.giveV
+			pl = pl + p; best = math.max(best, p)
+			local v = verdict(h.giveV, h.getV)
+			if v == "WIN" then w = w + 1 elseif v == "FAIR" then fa = fa + 1 else lo = lo + 1 end
+		end
+		sPL(sfmt(pl), (pl > 0) and "good" or ((pl < 0) and "bad" or nil))
+		sCnt(tostring(#hist)); sAvg(#hist > 0 and sfmt(pl / #hist) or "–"); sBest(sfmt(best), "good")
+		local tot = math.max(#hist, 1)
+		segs[1].Size = UDim2.new(w / tot, -2, 1, 0)
+		segs[2].Position = UDim2.new(w / tot, 0, 0, 0); segs[2].Size = UDim2.new(fa / tot, -2, 1, 0)
+		segs[3].Position = UDim2.new((w + fa) / tot, 0, 0, 0); segs[3].Size = UDim2.new(lo / tot, 0, 1, 0)
+		wl.Text = w .. " wins  ·  " .. fa .. " fair  ·  " .. lo .. " losses"
+
+		local inv, items = 0, {}
+		for _, e in ipairs(Bridge.GetInventory()) do
+			local lv = unitValue(e[1]) * e[2]
+			inv = inv + lv
+			items[#items + 1] = { e[1], lv }
+		end
+		series[n] = inv
+		local d = series[n] - series[n - 1]
+		delta.Text = ((d >= 0) and "▲ " or "▼ ") .. sfmt(d) .. " vs yesterday"
+		delta.TextColor3 = getColor((d >= 0) and "good" or "bad")
+
+		clear(tops)
+		table.sort(items, function(a, b) return a[2] > b[2] end)
+		local mx = items[1] and items[1][2] or 1
+		for i = 1, math.min(5, #items) do
+			local r = box(tops, UDim2.new(1, 0, 0, 20))
+			label(r, items[i][1], 11, "text", F.M, { Size = UDim2.new(0.36, 0, 1, 0), TextTruncate = AT_END, TextWrapped = false })
+			local tr = new("Frame", { Position = UDim2.new(0.38, 0, 0.5, -3), Size = UDim2.new(0.38, 0, 0, 6), BorderSizePixel = 0 }, r)
+			corner(tr, 3); bind(tr, "BackgroundColor3", "card2")
+			local fl = new("Frame", { Size = UDim2.new(items[i][2] / mx, 0, 1, 0), BorderSizePixel = 0 }, tr)
+			corner(fl, 3); bind(fl, "BackgroundColor3", "accent")
+			label(r, fmt(items[i][2]), 11, "accent", F.B, { Size = UDim2.new(0.22, 0, 1, 0), Position = UDim2.fromScale(0.78, 0), TextXAlignment = RIGHT, TextWrapped = false })
+		end
+	end
+	Bus.on("values", render)
+	render()
+
+	return function() -- onShow: replay bar animation
+		local lo, hi = 1e9, 0
+		for _, v in ipairs(series) do lo = math.min(lo, v); hi = math.max(hi, v) end
+		lo = lo * 0.85
+		for i, b in ipairs(bars) do
+			local target = math.clamp((series[i] - lo) / math.max(hi - lo, 1), 0.05, 1)
+			b.Size = UDim2.new(0.56, 0, 0, 0)
+			task.delay(i * 0.04, function()
+				if b.Parent then tween(b, { Size = UDim2.new(0.56, 0, target, 0) }, 0.45, Enum.EasingStyle.Quint) end
+			end)
+		end
+	end
+end
+
+------------------------------------------------ Settings
+local function applyTransparency()
+	local t = (S.transparency or 0) / 100
+	win.BackgroundTransparency = t
+	main.BackgroundTransparency = t
+end
+
+local layout -- forward declaration
+
+local function buildSettings(sc)
+	local card, title, row, toggle, dropdown, slider = U.card, U.title, U.row, U.toggle, U.dropdown, U.slider
+
+	title(sc, "Appearance")
+	local c1 = card(sc, 12)
+	dropdown(row(c1, "Theme", nil, 130), ThemeOrder, S.theme, function(v) S.theme = v; U.applyTheme(); save() end, 130)
+	label(c1, "Accent color", 13, "text", F.M)
+	local sw = box(c1, UDim2.new(1, 0, 0, 0), { AutomaticSize = YA })
+	new("UIListLayout", { FillDirection = HORZ, Padding = UDim.new(0, 10), Wraps = true, SortOrder = Enum.SortOrder.LayoutOrder }, sw)
+	local rings = {}
+	for _, name in ipairs(AccentOrder) do
+		local b = new("TextButton", { Text = "", AutoButtonColor = false, Size = UDim2.fromOffset(28, 28), BackgroundColor3 = Accents[name], BorderSizePixel = 0 }, sw)
+		corner(b, 14)
+		rings[name] = new("UIStroke", { Thickness = 2, Color = WHITE, Transparency = (S.accent == name) and 0 or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, b)
+		b.Activated:Connect(function()
+			S.accent = name
+			for n, r in pairs(rings) do r.Transparency = (n == name) and 0 or 1 end
+			U.applyTheme(); save()
+		end)
+	end
+	slider(row(c1, "UI scale", "Applies when you release the slider", 170), 0.7, 1.25, S.scale, 0.05, function(v) S.scale = v; save(); layout() end, { onEnd = true, fmt = function(v) return string.format("%.2f×", v) end })
+	slider(row(c1, "Transparency", nil, 170), 0, 40, S.transparency, 2, function(v) S.transparency = v; save(); applyTransparency() end, { fmt = function(v) return v .. "%" end })
+	dropdown(row(c1, "Sidebar", "Auto collapses on narrow screens", 130), { "Auto", "Icons only", "Expanded" }, S.sidebar, function(v) S.sidebar = v; save(); layout() end, 130)
+
+	title(sc, "Behavior")
+	local c2 = card(sc, 12)
+	toggle(row(c2, "Animations", "Tab transitions and tweens", 50), S.animations, function(v) S.animations = v; save() end)
+	toggle(row(c2, "Notifications", "Toast messages inside the UI", 50), S.notifications, function(v) S.notifications = v; save() end)
+	toggle(row(c2, "Show DEMO badges", "Mark non-connected elements", 50), S.showDemo, function(v)
+		S.showDemo = v; save()
+		for _, b in ipairs(demoBadges) do if b.Parent then b.Visible = v end end
+	end)
+
+	title(sc, "Data")
+	local c3 = card(sc, 12)
+	local cd = dropdown(row(c3, "Default currency", nil, 130), CurrencyOrder, S.currency, function(v) setCurrency(v) end, 130)
+	currencyDDs[#currencyDDs + 1] = cd
+	dropdown(row(c3, "Valuation system", "Used by Calculator and Checker", 150), Systems, S.system, function(v) S.system = v; save(); Bus.fire("values") end, 150)
+	label(c3, "Price sources are configured in Trade Helper.", 10, "sub", F.R)
+
+	title(sc, "About")
+	local c4 = card(sc, 12)
+	label(c4, "MM2 Trade Helper · UI prototype " .. VERSION, 12, "text", F.B)
+	label(c4, "All values, inventory and history are sample data. PC: press RightShift to hide or show the window.", 11, "sub", F.R)
+	local br = box(c4, UDim2.new(1, 0, 0, 32))
+	hlist(br, 8)
+	U.button(br, "Reset settings", "ghost", function() U.resetAll() end, UDim2.fromOffset(110, 30))
+	U.button(br, "Close UI", "danger", function() U.destroy() end, UDim2.fromOffset(90, 30))
+end
+
+------------------------------------------------------------------------ navigation
+local PageDefs = {
+	{ id = "Dashboard", icon = "▣", title = "Dashboard", sub = "Status, inventory value and quick actions", build = buildDashboard },
+	{ id = "Trade Helper", icon = "⇄", title = "Trade Helper", sub = "Alerts, item info, warnings and value display", build = buildHelper },
+	{ id = "Trade Checker", icon = "✔", title = "Trade Checker", sub = "Both sides valued · WIN / FAIR / LOSE", build = buildChecker },
+	{ id = "Inventory", icon = "▤", title = "Inventory", sub = "Your items with search, filters and prices", build = buildInventory },
+	{ id = "Calculator", icon = "∑", title = "Calculator", sub = "Build a trade manually and evaluate it", build = buildCalc },
+	{ id = "Item Database", icon = "☰", title = "Item Database", sub = "Every item with value and details", build = buildDatabase },
+	{ id = "Trade History", icon = "↻", title = "Trade History", sub = "Past trades with profit and loss", build = buildHistory },
+	{ id = "Statistics", icon = "▲", title = "Statistics", sub = "Profit, activity and value over time", build = buildStats },
+	{ id = "Settings", icon = "⚙", title = "Settings", sub = "Theme, behavior and data", build = buildSettings },
+}
+local PageByID = {}
+for _, d in ipairs(PageDefs) do PageByID[d.id] = d end
+
+local pages, current, navToken = {}, nil, 0
+local navItems, navPaints = {}, {}
+
+local function ensurePage(def)
+	if pages[def.id] then return pages[def.id] end
+	local cg = new("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, GroupTransparency = 1 }, pagesHost)
+	local sc = new("ScrollingFrame", {
+		Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+		AutomaticCanvasSize = YA, CanvasSize = UDim2.new(), ScrollingDirection = Enum.ScrollingDirection.Y, ElasticBehavior = Enum.ElasticBehavior.Never,
+	}, cg)
+	bind(sc, "ScrollBarImageColor3", "stroke")
+	pad(sc, 12, 4, 12, 16); vlist(sc, 12)
+	local entry = { cg = cg, scroll = sc }
+	local ok, res = pcall(def.build, sc)
+	if not ok then
+		warn("[MM2TH] page '" .. def.id .. "' failed: " .. tostring(res))
+		label(sc, "This page failed to build:\n" .. tostring(res), 11, SEM.bad, F.M)
+	elseif type(res) == "function" then
+		entry.onShow = res
+	end
+	pages[def.id] = entry
+	return entry
+end
+
+function Nav.go(id)
+	local def = PageByID[id]
+	if not def then return end
+	U.closeDD()
+	local old = current and pages[current]
+	current = id
+	local e = ensurePage(def)
+	pageTitle.Text = def.title
+	pageSub.Text = def.sub
+	for _, f in ipairs(navPaints) do f() end
+	navToken = navToken + 1
+	if old and old ~= e then
+		tween(old.cg, { GroupTransparency = 1 }, 0.12)
+		task.delay(S.animations and 0.13 or 0, function()
+			if pages[current] ~= old then old.cg.Visible = false end
+		end)
+	end
+	e.scroll.CanvasPosition = Vector2.zero
+	e.cg.Visible = true
+	e.cg.GroupTransparency = S.animations and 1 or 0
+	e.cg.Position = UDim2.fromOffset(0, S.animations and 14 or 0)
+	tween(e.cg, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.22)
+	if e.onShow then pcall(e.onShow) end
+end
+
+for _, def in ipairs(PageDefs) do
+	local b = new("TextButton", { Text = "", AutoButtonColor = false, Size = UDim2.new(1, 0, 0, 38), BorderSizePixel = 0 }, navList)
+	corner(b, 10)
+	local ind = new("Frame", { Size = UDim2.fromOffset(3, 18), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), BorderSizePixel = 0 }, b)
+	corner(ind, 2)
+	local ic = new("TextLabel", { BackgroundTransparency = 1, Text = def.icon, Font = F.B, TextSize = 16, Size = UDim2.fromOffset(30, 38) }, b)
+	local nm = label(b, def.title, 12, "sub", F.M, { Size = UDim2.new(1, -44, 1, 0), Position = UDim2.fromOffset(38, 0), TextTruncate = AT_END, TextWrapped = false })
+	local function paint()
+		local a = (current == def.id)
+		b.BackgroundColor3 = getColor("accentSoft")
+		b.BackgroundTransparency = a and 0 or 1
+		local c = a and getColor("accent") or getColor("sub")
+		ic.TextColor3 = c; nm.TextColor3 = c
+		ind.BackgroundColor3 = getColor("accent"); ind.Visible = a
+	end
+	reg(b, paint)
+	navPaints[#navPaints + 1] = paint
+	navItems[#navItems + 1] = { ic = ic, nm = nm }
+	b.Activated:Connect(function() Nav.go(def.id) end)
+end
+
+------------------------------------------------------------------------ layout
+layout = function()
+	local cam = workspace.CurrentCamera
+	local vp = cam and cam.ViewportSize or Vector2.new(900, 420)
+	local sc = S.scale
+	if not minimized then uiScale.Scale = sc end
+	local aw, ah = vp.X / sc, vp.Y / sc
+	local w, h
+	if vp.Y > vp.X then
+		w = math.min(aw * 0.97, 440); h = math.min(ah * 0.74, 640)
+	else
+		w = math.min(aw * 0.9, 740); h = math.min(ah * 0.88, 450)
+	end
+	w = math.max(math.min(w, aw - 8), 280)
+	h = math.max(math.min(h, ah - 8), 220)
+	win.Size = UDim2.fromOffset(w, h)
+	local expanded = (S.sidebar == "Expanded") or (S.sidebar == "Auto" and w >= 560)
+	local sideW = expanded and 148 or 54
+	side.Size = UDim2.new(0, sideW, 1, 0)
+	main.Position = UDim2.new(0, sideW, 0, 6)
+	main.Size = UDim2.new(1, -(sideW + 6), 1, -12)
+	contentW = w - sideW - 6 - 24
+	logoText.Visible = expanded
+	mark.AnchorPoint = expanded and Vector2.new(0, 0.5) or Vector2.new(0.5, 0.5)
+	mark.Position = expanded and UDim2.new(0, 12, 0.5, 0) or UDim2.new(0.5, 0, 0.5, 0)
+	for _, it in ipairs(navItems) do
+		it.nm.Visible = expanded
+		it.ic.AnchorPoint = expanded and Vector2.new(0, 0) or Vector2.new(0.5, 0)
+		it.ic.Position = expanded and UDim2.fromOffset(4, 0) or UDim2.new(0.5, 0, 0, 0)
+	end
+	protoBadge.Visible = w >= 540
+	for _, g in ipairs(grids) do g.apply() end
+	for _, s in ipairs(splits) do s.apply() end
+	clampOnScreen(win, 80)
+end
+
+local function applyAll()
+	U.applyTheme(); applyTransparency(); layout()
+	for _, d in ipairs(currencyDDs) do if d.frame.Parent then d.set(S.currency) end end
+end
+
+function U.resetAll()
+	U.closeDD()
+	S = deepCopy(DEFAULTS)
+	if genv.MM2TH then genv.MM2TH.State = S end
+	save()
+	for _, e in pairs(pages) do e.cg:Destroy() end
+	pages = {}
+	Bus.clear(); wipe(grids); wipe(splits); wipe(demoBadges); wipe(currencyDDs)
+	local id = current or "Dashboard"
+	current = nil
+	applyAll()
+	Nav.go(id)
+	U.toast("Settings reset to defaults", "good", true)
+end
+
+local camConn
+local function hookCamera()
+	if camConn then camConn:Disconnect() end
+	local cam = workspace.CurrentCamera
+	if cam then camConn = cam:GetPropertyChangedSignal("ViewportSize"):Connect(layout) end
+end
+hookCamera()
+connect(workspace:GetPropertyChangedSignal("CurrentCamera"), function() hookCamera(); layout() end)
+
+------------------------------------------------------------------------ start
+genv.MM2TH = { Bridge = Bridge, Bus = Bus, State = S, Notify = U.toast, Destroy = U.destroy, Version = VERSION }
+applyTransparency()
+layout()
+Nav.go("Dashboard")
+setOpen(true)
+print("[MM2 Trade Helper] UI " .. VERSION .. " loaded")
