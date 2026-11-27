@@ -10,7 +10,10 @@ local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local player = Players.LocalPlayer
 
-local old = (gethui and gethui()) or CoreGui
+local old = CoreGui
+pcall(function()
+    if type(gethui) == "function" then old = gethui() end
+end)
 local existing = old:FindFirstChild("MM2TradeHelper_Test")
 if existing then existing:Destroy() end
 
@@ -349,9 +352,13 @@ statusNote.Position = UDim2.fromOffset(13, 49)
 local quick = card(dashboard, 94)
 label(quick, "QUICK ACCESS", 10, C.muted, true).Position = UDim2.fromOffset(13, 8)
 local q1 = button(quick, "Trade Helper", UDim2.new(0.48, -5, 0, 34), function()
-    navButtons["Trade Helper"].button:Activate()
     pages["Dashboard"].Visible = false
     pages["Trade Helper"].Visible = true
+    for n, item in pairs(navButtons) do
+        item.button.BackgroundColor3 = n == "Trade Helper" and C.panel3 or C.panel
+        item.mark.BackgroundTransparency = n == "Trade Helper" and 0 or 1
+        item.text.TextColor3 = n == "Trade Helper" and C.text or C.muted
+    end
     activePage = "Trade Helper"
 end, true)
 q1.Position = UDim2.fromOffset(12, 42)
