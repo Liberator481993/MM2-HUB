@@ -411,12 +411,17 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
         ["TRADE WITH  "]="ОБМЕН С  ", ["⚠  Unfair trade — you lose "]="⚠  Невыгодный обмен — вы теряете ",
         ["This page failed to build:\\n"]="Не удалось открыть страницу:\\n",
     }
+    local RU_KEYS = {}
+    for en in pairs(RU) do RU_KEYS[#RU_KEYS + 1] = en end
+    table.sort(RU_KEYS, function(a, b) return #a > #b end)
     local function tr(value)
         if type(value) ~= "string" then return value end
         if RU[value] then return RU[value] end
         local out = value
-        for en, ru in pairs(RU) do
-            if #en > 4 and out:find(en, 1, true) then out = out:gsub(en:gsub("([^%w])","%%%1"), ru) end
+        for _, en in ipairs(RU_KEYS) do
+            if #en > 4 and out:find(en, 1, true) then
+                out = out:gsub(en:gsub("([^%w])","%%%1"), RU[en])
+            end
         end
         return out
     end
@@ -909,6 +914,12 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
             if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then return end
             dragging, dragInput = true, input
             startInput, startPos = input.Position, target.Position
+        end)
+        connect(UserInputService.TouchMoved, function(input)
+            if dragging and dragInput and dragInput.UserInputType == Enum.UserInputType.Touch
+                and input.TouchId == dragInput.TouchId then
+                moveTo(input.Position)
+            end
         end)
         connect(UserInputService.InputChanged, function(input)
             if not dragging then return end
