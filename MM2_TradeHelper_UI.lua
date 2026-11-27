@@ -821,27 +821,39 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     end
     
     local function makeDraggable(handle, target, onTap)
+    	-- One drag controller per handle. The window shell is moved in screen pixels;
+    	-- do not attach controllers to nested title/label objects (that causes double movement).
     	local dragging, moved, startIn, startPos, active, mouseDown = false, false, nil, nil, nil, false
     	connect(handle.InputBegan, function(i)
     		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-    			dragging = true; moved = false; active = i; mouseDown = i.UserInputType == Enum.UserInputType.MouseButton1
-    			startIn = i.Position; startPos = target.Position
+    			dragging = true
+    			moved = false
+    			active = i
+    			mouseDown = i.UserInputType == Enum.UserInputType.MouseButton1
+    			startIn = i.Position
+    			startPos = target.Position
     		end
     	end)
     	connect(UserInputService.InputChanged, function(i)
-    		local isMove = (mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement) or (active and i == active)
-    		if dragging and isMove then
-    			local d = i.Position - startIn
-    			if d.Magnitude > 4 then moved = true end
-    			if moved then
-    				target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-    				clampOnScreen(target, 12)
-    			end
+    		local isMove = (mouseDown and i.UserInputType == Enum.UserInputType.MouseMovement)
+    			or (active and i == active)
+    		if not dragging or not isMove then return end
+    		local d = i.Position - startIn
+    		if d.Magnitude > 3 then moved = true end
+    		if moved then
+    			target.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    			-- Keep the complete window visible, but allow its top edge to reach y=0.
+    			clampOnScreen(target, 0)
     		end
     	end)
     	connect(UserInputService.InputEnded, function(i)
-    		if dragging and (i == active or i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch) then
-    			dragging = false; mouseDown = false; active = nil
+    		local ended = (active and i == active)
+    			or (mouseDown and i.UserInputType == Enum.UserInputType.MouseButton1)
+    			or (active and active.UserInputType == Enum.UserInputType.Touch and i.UserInputType == Enum.UserInputType.Touch)
+    		if dragging and ended then
+    			dragging = false
+    			mouseDown = false
+    			active = nil
     			if not moved and onTap then onTap() end
     		end
     	end)
@@ -874,12 +886,10 @@ local __MM2TH_BOOT_OK, __MM2TH_BOOT_ERR = xpcall(function()
     	end
     end
     
+    -- topbar and sidebar logo are the only window drag zones; nested labels are not
+    -- registered separately, preventing two or more touch handlers moving the same window.
     makeDraggable(topbar, win)
-    makeDraggable(pageTitle, win)
-    makeDraggable(pageSub, win)
     makeDraggable(logo, win)
-    makeDraggable(logoText, win)
-    makeDraggable(mark, win)
     makeDraggable(fab, fab, function() setOpen(true) end)
     minBtn.Activated:Connect(function() setOpen(false) end)
     connect(UserInputService.InputBegan, function(i, gp)
